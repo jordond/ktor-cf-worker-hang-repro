@@ -1,9 +1,12 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ktor-cf-worker-hang-repro",
+  "account_id": "bca591069b9efc9b82571ab6301ca60c",
   "main": "index.mjs",
   "compatibility_date": "2026-02-25",
-  "compatibility_flags": ["no_handle_cross_request_promise_resolution"],
+  "routes": [
+    { "pattern": "ktor-hang.jordond.dev", "custom_domain": true }
+  ],
   "observability": {
     "enabled": true
   }

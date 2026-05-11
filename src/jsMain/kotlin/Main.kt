@@ -1,6 +1,4 @@
 import io.ktor.client.HttpClient
-import io.ktor.client.plugins.logging.LogLevel
-import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.CoroutineScope
@@ -25,19 +23,6 @@ private fun responseInit(status: Short): ResponseInit {
 private fun requestScope(): CoroutineScope =
     CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
 
-// The Logging plugin changes the hang surface, so the two configurations
-// are exposed on separate routes. See README for the prod-vs-local
-// distinction.
-private fun makeClient(withLogging: Boolean): HttpClient =
-    HttpClient {
-        expectSuccess = true
-        if (withLogging) {
-            install(Logging) {
-                level = LogLevel.NONE
-            }
-        }
-    }
-
 @OptIn(ExperimentalJsExport::class)
 @JsExport
 fun fetch(
@@ -50,14 +35,12 @@ fun fetch(
     } catch (_: Throwable) {
         "/"
     }
-    val normalized = path.trimEnd('/').ifEmpty { "/" }
-    if (normalized == "/native") return nativeFetch()
-    val withLogging = normalized != "/no-logging"
+    if (path.trimEnd('/') == "/native") return nativeFetch()
 
     val scope = requestScope()
     return scope
         .promise {
-            val client = makeClient(withLogging)
+            val client = HttpClient { expectSuccess = true }
             try {
                 val body = client
                     .get("https://www.cloudflare.com/cdn-cgi/trace")
