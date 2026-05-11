@@ -25,17 +25,16 @@ private fun responseInit(status: Short): ResponseInit {
 private fun requestScope(): CoroutineScope =
     CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
 
-// Installing the Logging plugin makes the hang rate worse (28/30 vs
-// ~24/30 in our local burst). Comment the install block out to see the
-// reduced rate. Real Cloudflare prod drops near zero without Logging
-// because edge traffic is distributed across many isolates; local
-// wrangler dev serves the entire burst from one isolate, so the base
-// Ktor JS engine still hangs.
-private fun makeClient(): HttpClient =
+// The Logging plugin changes the hang surface, so the two configurations
+// are exposed on separate routes. See README for the prod-vs-local
+// distinction.
+private fun makeClient(withLogging: Boolean): HttpClient =
     HttpClient {
         expectSuccess = true
-        install(Logging) {
-            level = LogLevel.NONE
+        if (withLogging) {
+            install(Logging) {
+                level = LogLevel.NONE
+            }
         }
     }
 
@@ -46,19 +45,19 @@ fun fetch(
     @Suppress("UNUSED_PARAMETER") env: dynamic,
     @Suppress("UNUSED_PARAMETER") ctx: dynamic,
 ): Promise<Response> {
-    // /native -> nativeFetch (no Ktor, hang-free baseline)
-    // anything else -> Ktor HttpClient (reproduces the hang)
     val path = try {
         org.w3c.dom.url.URL(request.url).pathname
     } catch (_: Throwable) {
         "/"
     }
-    if (path.trimEnd('/') == "/native") return nativeFetch()
+    val normalized = path.trimEnd('/').ifEmpty { "/" }
+    if (normalized == "/native") return nativeFetch()
+    val withLogging = normalized != "/no-logging"
 
     val scope = requestScope()
     return scope
         .promise {
-            val client = makeClient()
+            val client = makeClient(withLogging)
             try {
                 val body = client
                     .get("https://www.cloudflare.com/cdn-cgi/trace")
@@ -74,15 +73,12 @@ fun fetch(
         }
 }
 
-// Comparison probe. Same upstream call without Ktor, using the native
-// fetch() that Cloudflare Workers exposes. Routed via /native to confirm
-// the hang is specific to Ktor.
 private fun nativeFetch(): Promise<Response> =
-    Promise<dynamic> { resolve, reject ->
-        js("globalThis.fetch")("https://www.cloudflare.com/cdn-cgi/trace")
-            .then({ r: dynamic -> resolve(r) }, { e: dynamic -> reject(e) })
-    }.then { r: dynamic ->
-        (r.text() as Promise<String>).then { text ->
-            Response(text, responseInit(200))
+    js("globalThis.fetch")("https://www.cloudflare.com/cdn-cgi/trace")
+        .unsafeCast<Promise<dynamic>>()
+        .then { r: dynamic ->
+            (r.text() as Promise<String>).then { text ->
+                Response(text, responseInit(200))
+            }
         }
-    }.unsafeCast<Promise<Response>>()
+        .unsafeCast<Promise<Response>>()

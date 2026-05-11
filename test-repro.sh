@@ -7,7 +7,8 @@
 # tears wrangler down.
 #
 # Usage:
-#   ./test-repro.sh                  # Ktor path, 30 concurrent requests
+#   ./test-repro.sh                  # Ktor path with Logging plugin (worst rate)
+#   ./test-repro.sh --no-logging     # Ktor path without the Logging plugin
 #   ./test-repro.sh --native         # native fetch path (no Ktor, hang-free baseline)
 #   ./test-repro.sh -n 60            # 60 concurrent requests
 #   ./test-repro.sh -p 8788          # bind wrangler on a different port
@@ -33,6 +34,7 @@ PORT=8787
 KEEP=0
 SKIP_BUILD=0
 NATIVE=0
+NO_LOGGING=0
 while [ $# -gt 0 ]; do
     case "$1" in
         -n|--concurrent) CONCURRENT=$2; shift 2;;
@@ -41,17 +43,26 @@ while [ $# -gt 0 ]; do
         --keep) KEEP=1; shift;;
         --skip-build) SKIP_BUILD=1; shift;;
         --native) NATIVE=1; shift;;
+        --no-logging) NO_LOGGING=1; shift;;
         -h|--help) sed -n '2,/^$/p' "$0"; exit 0;;
         *) echo "unknown arg: $1" >&2; exit 2;;
     esac
 done
 
+if [ "$NATIVE" -eq 1 ] && [ "$NO_LOGGING" -eq 1 ]; then
+    echo "--native and --no-logging are mutually exclusive" >&2
+    exit 2
+fi
+
 if [ "$NATIVE" -eq 1 ]; then
     TEST_PATH="/native"
     MODE="native fetch (no Ktor)"
+elif [ "$NO_LOGGING" -eq 1 ]; then
+    TEST_PATH="/no-logging"
+    MODE="Ktor HttpClient (no Logging plugin)"
 else
     TEST_PATH="/"
-    MODE="Ktor HttpClient"
+    MODE="Ktor HttpClient (with Logging plugin)"
 fi
 URL="http://localhost:${PORT}${TEST_PATH}"
 
@@ -256,10 +267,10 @@ else
         exit 0
     else
         echo "RESULT: no hangs observed (${OK}/${CONCURRENT} ok)."
-        echo "If you expected the bug to reproduce: check that install(Logging) is enabled in"
-        echo "src/jsMain/kotlin/Main.kt, that wrangler.json still has"
+        echo "If you expected the bug to reproduce: check that wrangler.json still has"
         echo "compatibility_flags: [\"no_handle_cross_request_promise_resolution\"], and"
-        echo "rebuild without --skip-build."
+        echo "rebuild without --skip-build. Note --no-logging exercises the base Ktor"
+        echo "engine which hangs at a lower (but still nonzero) rate locally."
         exit 1
     fi
 fi
