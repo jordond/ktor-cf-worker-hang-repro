@@ -1,0 +1,10 @@
+.gradle/
+build/
+node_modules/
+.dev.vars
+.wrangler/
+*.log
+.DS_Store
+.idea/
+*.iml
+kotlin-js-store/

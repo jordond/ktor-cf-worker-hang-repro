@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ktor-cf-worker-hang-repro",
+  "main": "index.mjs",
+  "compatibility_date": "2026-02-25",
+  "compatibility_flags": ["no_handle_cross_request_promise_resolution"],
+  "observability": {
+    "enabled": true
+  }
+}
